@@ -1,0 +1,48 @@
+curl -v --location 'http://localhost:8080/ai/chat/stream' \
+--header 'Content-Type: application/json' \
+--data '{
+    "question": "Hello, my name is Will",
+    "conversationId": "will-001"
+}'
+
+curl -v --location 'http://localhost:8080/ai/chat/stream' \
+--header 'Content-Type: application/json' \
+--data '{
+    "question": "What is my name?",
+    "conversationId": "will-001"
+}'
+
+curl -v --location 'http://localhost:8080/ai/chat/stream' \
+--header 'Content-Type: application/json' \
+--data '{
+    "question": "I like watching movies like Despicable Me, Megamind etc. Could you recommend more for me?",
+    "conversationId": "will-001"
+}'
+
+curl -v --location 'http://localhost:8080/ai/chat/stream' \
+--header 'Content-Type: application/json' \
+--data '{
+    "question": "I will go and watch Kung Fu Panda series. Thanks!",
+    "conversationId": "will-001"
+}'
+
+curl -v --location 'http://localhost:8080/ai/chat/stream' \
+--header 'Content-Type: application/json' \
+--data '{
+    "question": "What movies do I like?",
+    "conversationId": "will-001"
+}'
+
+curl -v --location 'http://localhost:8080/ai/chat/stream' \
+--header 'Content-Type: application/json' \
+--data '{
+    "question": "Re-cap me please, anythin we have talked about my hobbies?",
+    "conversationId": "will-001"
+}'
+
+curl -v --location 'http://localhost:8080/ai/chat/stream' \
+--header 'Content-Type: application/json' \
+--data '{
+    "question": "I like coding, and I am good at it. Please recommend 3 books for me.",
+    "conversationId": "will-001"
+}'
