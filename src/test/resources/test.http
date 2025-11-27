@@ -44,7 +44,7 @@ Content-Type: application/json
   "query": "Thanks, I will take a taxi from the airport to the city center. How long does it take to get from Athens airport to the city center by taxi?"
 }
 
-
+###
 POST http://localhost:8080/chat
 Content-Type: application/json
 
@@ -52,3 +52,10 @@ Content-Type: application/json
   "query": "What is my name?"
 }
 
+###
+POST http://localhost:8080/chat
+Content-Type: application/json
+
+{
+  "query": "What did we discuss? Re-cap me please."
+}

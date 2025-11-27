@@ -14,12 +14,15 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
 public class CompressingChatMemoryStore implements ChatMemoryStore {
     private final ChatMemoryStore delegate;
     private final ChatModel chatModel;
     private final int threshold;
+    private final Map<Object, String> latestSummaryCache = new ConcurrentHashMap<>();
 
     private static final String SUMMARY_PREFIX = "Context: The following is a summary of the previous conversation:";
 
@@ -65,7 +68,7 @@ public class CompressingChatMemoryStore implements ChatMemoryStore {
        SystemMessage systemMsg = (SystemMessage) messages.stream()
                .filter(m -> m.type() == ChatMessageType.SYSTEM)
                .findFirst().orElse(null);
-       systemMsg = replaceTheLatestSummary(systemMsg, summary);
+       systemMsg = replaceTheLatestSummary(memoryId, systemMsg, summary);
        Log.infof("Generated system message with summary: %s", systemMsg.text());
        Log.infof("Updating memory messages of memory ID: %s", memoryId);
        delegate.updateMessages(memoryId, List.of(systemMsg));
@@ -87,12 +90,24 @@ public class CompressingChatMemoryStore implements ChatMemoryStore {
                 Summarize the following dialogue into a brief summary, preserving context and tone:
                 
                 """);
+        boolean foundSystemSummary = false;
         for (ChatMessage msg : toBeCompressed) {
             switch (msg.type()) {
-                case ChatMessageType.SYSTEM -> sb.append("Context: ").append(((SystemMessage) msg).text()).append("\n");
+                case ChatMessageType.SYSTEM -> {
+                    foundSystemSummary = true;
+                    sb.append("Context: ").append(((SystemMessage) msg).text()).append("\n");
+                }
                 case ChatMessageType.USER -> sb.append("User: ").append(((UserMessage) msg).singleText()).append("\n");
                 case ChatMessageType.AI -> sb.append("Assistant: ").append(((AiMessage) msg).text()).append("\n");
                 default -> Log.debugf("Skipping message of type: %s", msg.type());
+            }
+        }
+        // If framework cleared messages before update and no system summary present,
+        // fall back to the cached latest summary so context is preserved across exchanges.
+        if (!foundSystemSummary) {
+            String cached = latestSummaryCache.get(memoryId);
+            if (cached != null && !cached.isBlank()) {
+                sb.append("Context: ").append(cached).append("\n");
             }
         }
         return chatModel.chat(sb.toString());
@@ -107,9 +122,11 @@ public class CompressingChatMemoryStore implements ChatMemoryStore {
         }
     }
 
-    private SystemMessage replaceTheLatestSummary(SystemMessage systemMsg, String summary) {
+    private SystemMessage replaceTheLatestSummary(Object memoryId, SystemMessage systemMsg, String summary) {
         if (systemMsg == null) {
-            return SystemMessage.systemMessage(SUMMARY_PREFIX + "\n" + summary);
+            String newContent = SUMMARY_PREFIX + "\n" + summary;
+            latestSummaryCache.put(memoryId, summary);
+            return SystemMessage.systemMessage(newContent);
         }
 
         String content = systemMsg.text();
@@ -123,6 +140,7 @@ public class CompressingChatMemoryStore implements ChatMemoryStore {
         } else {
             newContent = content + "\n\n" + SUMMARY_PREFIX + "\n" + summary;
         }
+        latestSummaryCache.put(memoryId, summary);
         return SystemMessage.systemMessage(newContent);
     }
 
@@ -137,7 +155,25 @@ public class CompressingChatMemoryStore implements ChatMemoryStore {
     public void deleteMessages(Object memoryId) {
         Log.infof("Current messages: %s", delegate.getMessages(memoryId));
         Log.infof("Deleting memory ID: %s", memoryId);
-        Thread.dumpStack();
+        // Extract and cache summary before deletion to preserve it across framework clear() calls
+        List<ChatMessage> currentMessages = delegate.getMessages(memoryId);
+        Log.infof("Current messages: %s", currentMessages);
+        for (ChatMessage msg : currentMessages) {
+            if (msg.type() == ChatMessageType.SYSTEM) {
+                SystemMessage systemMsg = (SystemMessage) msg;
+                String content = systemMsg.text();
+                if (content.contains(SUMMARY_PREFIX)) {
+                    int startIndex = content.indexOf(SUMMARY_PREFIX) + SUMMARY_PREFIX.length();
+                    String summary = content.substring(startIndex).strip();
+                    if (!summary.isBlank()) {
+                        latestSummaryCache.put(memoryId, summary);
+                    }
+                    break;
+                }
+            }
+        }
+        // Intentionally do NOT clear the latestSummaryCache here so that framework-driven
+        // clear+update cycles do not lose the semantic summary across exchanges.
         delegate.deleteMessages(memoryId);
     }
 }
